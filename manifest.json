@@ -19,7 +19,8 @@
     "webRequest",
     "webRequestBlocking",
     "*://*.twimg.com/",
-    "https://twitter.com/"
+    "https://twitter.com/*",
+    "https://api.twitter.com/*"
   ],
   "options_page": "options.html",
   "content_scripts": [
