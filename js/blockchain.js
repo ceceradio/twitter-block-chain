@@ -31,7 +31,7 @@ if (typeof XPCNativeWrapper === 'function') {
 browser.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     if (typeof request.blockChainStart !== "undefined") {
         const blockChainableHost = (location.hostname === 'twitter.com');
-        const blockChainablePath = /^\/[0-9a-z_]+\/(?:following|followers)/.test(location.pathname);
+        const blockChainablePath = /^\/[0-9A-Za-z_]+\/(?:following|followers)/.test(location.pathname);
         const protected = $(".ProtectedTimeline").length > 0;
         const blockChainable = (blockChainableHost && blockChainablePath && !protected);
         if (blockChainable || request.blockChainStart == 'import') {
