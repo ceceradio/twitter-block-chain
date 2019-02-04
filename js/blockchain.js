@@ -53,7 +53,9 @@ browser.runtime.onMessage.addListener(function(request, sender, sendResponse) {
 });
 
 function getProfileUsername() {
-    return $(".ProfileSidebar .ProfileHeaderCard .ProfileHeaderCard-screenname a span").text();
+    const pattern = /^\/([0-9a-z_]+)\/(?:followers|following)/i;
+    const match = pattern.exec(location.pathname)
+    return match && match[1]
 }
 async function startAccountFinder (callback) {
     function sleep (delay) {
@@ -355,7 +357,7 @@ function showDialog() {
     $("body").append(
 '<div id="blockchain-dialog" class="modal-container block-or-report-dialog block-selected report-user">'+
     '<div class="close-modal-background-target"></div>'+
-    '<div class="modal modal-medium draggable" id="block-or-report-dialog-dialog" role="dialog" aria-labelledby="block-or-report-dialog-header" style="top: 240px; left: 470px;"><div class="js-first-tabstop" tabindex="0"></div>'+
+    '<div class="modal modal-medium draggable" id="block-or-report-dialog-dialog" role="dialog" aria-labelledby="block-or-report-dialog-header"><div class="js-first-tabstop" tabindex="0"></div>'+
     '<div class="modal-content" role="document">'+
         '<div class="modal-header">'+
             '<h3 class="modal-title report-title" id="blockchain-dialog-header">Twitter Block Chain</h3>'+
@@ -445,4 +447,8 @@ function showDialog() {
             $("#blockchain-dialog").hide();
         }
     });
+    if (/\bnight_mode=1\b/.test(document.cookie)) {
+        document.documentElement.classList.add('night-mode');
+        $("#blockchain-dialog .modal-close").text("x")
+    }
 }
