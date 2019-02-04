@@ -171,7 +171,7 @@ function startBlocker() {
         for (var i=0;i<batchBlockCount;i++) {
             var user = userQueue.dequeue();
             if (typeof user !== "undefined") {
-                doBlock($("#signout-form input.authenticity_token").val(), user.id, user.name);
+                doBlock(user.id, user.name);
             }
             else {
                 break;
@@ -200,23 +200,30 @@ function startImporter(data) {
         for(var i = 0; i < batchBlockCount && index < data.users.length; i++) {
             var user = data.users[index];
             if (typeof user !== "undefined") {
-                doBlock($("#signout-form input.authenticity_token").val(), user.id, user.name);
+                doBlock(user.id, user.name);
             }
             index++;
         }
     });
 }
-function doBlock(authenticity_token, user_id, user_name, callback) {
+function doBlock(user_id, user_name, callback) {
+    let csrfToken = /\bct0=([0-9a-f]{32})\b/.exec(document.cookie);
+    if (csrfToken && csrfToken[1]) {
+        csrfToken = csrfToken[1];
+    }
     $.ajax({
-        url: "https://twitter.com/i/user/block",
+        url: "https://api.twitter.com/1.1/blocks/create.json",
         method: "POST",
-        dataType: 'json',
+        dataType: "json",
+        headers: {
+            authorization: "Bearer " + BEARER_TOKEN,
+            "x-csrf-token": csrfToken,
+            "x-twitter-active-user": "yes",
+            "x-twitter-auth-type": "OAuth2Session"
+        },
         data: {
-            authenticity_token: authenticity_token,
-            challenges_passed: false,
-            handles_challenges: 1,
-            impression_id: "",
-            //screen_name: user_name,
+            include_entities: false,
+            skip_status: true,
             user_id: String(user_id)
         }
     }).done(function(response) {
