@@ -32,8 +32,12 @@ browser.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     if (typeof request.blockChainStart !== "undefined") {
         const blockChainableHost = (location.hostname === 'twitter.com');
         const blockChainablePath = /^\/[0-9A-Za-z_]+\/(?:following|followers)/.test(location.pathname);
-        const protected = $(".ProtectedTimeline").length > 0;
-        const blockChainable = (blockChainableHost && blockChainablePath && !protected);
+        // for legacy UI
+        const protected1 = $(".ProtectedTimeline").length > 0;
+        // for responsive UI
+        const protected2 = $('[data-testid="primaryColumn"] [data-testid="UserCell"]').length <= 0
+        const isProtected = (protected1 || protected2)
+        const blockChainable = (blockChainableHost && blockChainablePath && !isProtected);
         if (blockChainable || request.blockChainStart == 'import') {
             sendResponse({ack: true});
             if (request.blockChainStart == 'block') {
