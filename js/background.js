@@ -65,23 +65,28 @@ function _makeRequest(obj) {
     } else {
         obj.headers = addtlHeaders;
     }
-    // return fetch(
-    //     obj.url, 
-    //     {
-    //         credentials: 'include',
-    //         method: obj.method || "GET",
-    //         headers: {
-    //             ...obj.headers,
-    //             "Access-Control-Expose-Headers": "x-rate-limit-limit, x-rate-limit-remaining, x-rate-limit-reset",
-    //             "Access-Control-Allow-Headers": "x-rate-limit-limit, x-rate-limit-remaining, x-rate-limit-reset"
-    //         },
-    //         body: obj.body
-    //     }
-    // )
     return _xhr(obj).then((response) => {
         if (response.__status >= 200 && response.__status < 300) {
-            console.log(response);
-            return response;
+            rateLimitRemaining = response.__headers['x-rate-limit-remaining']
+            rateLimitResetTime = response.__headers['x-rate-limit-reset'] * 1000
+            
+            console.log('remaining: ' + rateLimitRemaining)
+            if (rateLimitRemaining < 30) {
+                var delay = 10000;
+                now = Date.now()
+                delay += (rateLimitResetTime - now);
+                delay = Math.max(1, delay);
+                min = (delay / 60000)
+                console.log('delay ' +  min.toFixed(1) + ' minus.')
+            }else {
+                var delay = 1;
+            }
+
+            return new Promise((res, rej)=> {
+                setTimeout(()=> { 
+                    res(response);
+                }, delay);
+            });
         }
         else {
             throw new Error(response.__status);
