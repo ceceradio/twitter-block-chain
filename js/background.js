@@ -15,6 +15,46 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
     { urls: ['https://twitter.com/i/user/block'] },
     ['blocking', 'requestHeaders']
 );
+
+function _xhr(obj){
+    return new Promise((resolve, reject) => {
+        let xhr = new XMLHttpRequest();
+        xhr.withCredentials = true;
+        xhr.open(obj.method || "GET", obj.url);
+        if (obj.headers) {
+            Object.keys(obj.headers).forEach(key => {
+                xhr.setRequestHeader(key, obj.headers[key]);
+            });
+        }
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 400) {
+                // Get the raw header string
+                var headers = xhr.getAllResponseHeaders();
+
+                // Convert the header string into an array
+                // of individual headers
+                var arr = headers.trim().split(/[\r\n]+/);
+
+                // Create a map of header names to values
+                var headerMap = {};
+                arr.forEach(function (line) {
+                    var parts = line.split(': ');
+                    var header = parts.shift();
+                    var value = parts.join(': ');
+                    headerMap[header] = value;
+                });
+                rsp = JSON.parse(xhr.response);
+                Object.assign(rsp, {"__headers": headerMap, "__status": xhr.status})
+                resolve(rsp);
+            } else {
+                reject(xhr.statusText);
+            }
+        };
+        xhr.onerror = () => reject(xhr.statusText);
+        xhr.send(obj.body);
+    });
+}
+
 function _makeRequest(obj) {
     const addtlHeaders = {
         authorization: mobileTwitterBearerToken,
@@ -25,22 +65,26 @@ function _makeRequest(obj) {
     } else {
         obj.headers = addtlHeaders;
     }
-    return fetch(
-        obj.url, 
-        {
-            credentials: 'include',
-            method: obj.method || "GET",
-            headers: {
-                ...obj.headers
-            },
-            body: obj.body
-        }
-    ).then((response) => {
-        if (response.status >= 200 && response.status < 300) {
-            return response.json();
+    // return fetch(
+    //     obj.url, 
+    //     {
+    //         credentials: 'include',
+    //         method: obj.method || "GET",
+    //         headers: {
+    //             ...obj.headers,
+    //             "Access-Control-Expose-Headers": "x-rate-limit-limit, x-rate-limit-remaining, x-rate-limit-reset",
+    //             "Access-Control-Allow-Headers": "x-rate-limit-limit, x-rate-limit-remaining, x-rate-limit-reset"
+    //         },
+    //         body: obj.body
+    //     }
+    // )
+    return _xhr(obj).then((response) => {
+        if (response.__status >= 200 && response.__status < 300) {
+            console.log(response);
+            return response;
         }
         else {
-            throw new Error(response.statusText);
+            throw new Error(response.__status);
         }
     })
 }
