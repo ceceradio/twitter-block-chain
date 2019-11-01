@@ -70,8 +70,8 @@ function _makeRequest(obj) {
             rateLimitRemaining = response.__headers['x-rate-limit-remaining']
             rateLimitResetTime = response.__headers['x-rate-limit-reset'] * 1000
             
-            console.log('remaining: ' + rateLimitRemaining)
-            if (rateLimitRemaining < 30) {
+            // console.log('remaining: ' + rateLimitRemaining)
+            if (rateLimitRemaining < 60) {
                 var delay = 10000;
                 now = Date.now()
                 delay += (rateLimitResetTime - now);
