@@ -44,7 +44,7 @@ function _xhr(obj){
                     headerMap[header] = value;
                 });
                 rsp = JSON.parse(xhr.response);
-                Object.assign(rsp, {"__headers": headerMap, "__status": xhr.status})
+                Object.assign(rsp, {"headers": headerMap, "status": xhr.status})
                 resolve(rsp);
             } else {
                 reject(xhr.statusText);
@@ -66,9 +66,9 @@ function _makeRequest(obj) {
         obj.headers = addtlHeaders;
     }
     return _xhr(obj).then((response) => {
-        if (response.__status >= 200 && response.__status < 300) {
-            rateLimitRemaining = response.__headers['x-rate-limit-remaining']
-            rateLimitResetTime = response.__headers['x-rate-limit-reset'] * 1000
+        if (response.status >= 200 && response.status < 300) {
+            rateLimitRemaining = response.headers['x-rate-limit-remaining']
+            rateLimitResetTime = response.headers['x-rate-limit-reset'] * 1000
             
             // console.log('remaining: ' + rateLimitRemaining)
             if (rateLimitRemaining < 60) {
@@ -77,19 +77,19 @@ function _makeRequest(obj) {
                 delay += (rateLimitResetTime - now);
                 delay = Math.max(1, delay);
                 min = (delay / 60000)
-                console.log('delay ' +  min.toFixed(1) + ' minus.')
+                console.log('Waiting for twitter api cooldown ' +  min.toFixed(0) + ' minus.')
             }else {
                 var delay = 1;
             }
 
-            return new Promise((res, rej)=> {
+            return new Promise((resolve, reject)=> {
                 setTimeout(()=> { 
-                    res(response);
+                    resolve(response);
                 }, delay);
             });
         }
         else {
-            throw new Error(response.__status);
+            throw new Error(response.status);
         }
     })
 }
