@@ -10,13 +10,13 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
                 break;
             }
         }
-        return { requestHeaders: details.requestHeaders };
+        return {requestHeaders: details.requestHeaders};
     },
-    { urls: ['https://twitter.com/i/user/block'] },
+    {urls: ['https://twitter.com/i/user/block']},
     ['blocking', 'requestHeaders']
 );
 
-function _xhr(obj){
+function _xhr(obj) {
     return new Promise((resolve, reject) => {
         let xhr = new XMLHttpRequest();
         xhr.withCredentials = true;
@@ -40,12 +40,16 @@ function _xhr(obj){
                 arr.forEach(function (line) {
                     var parts = line.split(': ');
                     var header = parts.shift();
-                    var value = parts.join(': ');
-                    headerMap[header] = value;
+                    if (header.toLowerCase() === "x-rate-limit-remaining"
+                        || header.toLowerCase() === "x-rate-limit-reset") {
+                        header = header.toLowerCase();
+                    }
+                    headerMap[header] = parts.join(': ');
                 });
                 rsp = JSON.parse(xhr.response);
-                Object.assign(rsp, {"headers": headerMap, "status": xhr.status})
-                resolve(rsp);
+                // Object.assign(rsp, {"__headers__": headerMap, "__status__": xhr.status})
+                rsp_ex = {"__headers__": headerMap, "__status__": xhr.status, "data": rsp};
+                resolve(rsp_ex);
             } else {
                 reject(xhr.statusText);
             }
@@ -66,45 +70,32 @@ function _makeRequest(obj) {
         obj.headers = addtlHeaders;
     }
     return _xhr(obj).then((response) => {
-        if (response.status >= 200 && response.status < 300) {
-            rateLimitRemaining = response.headers['x-rate-limit-remaining']
-            rateLimitResetTime = response.headers['x-rate-limit-reset'] * 1000
-            
-            // console.log('remaining: ' + rateLimitRemaining)
-            if (rateLimitRemaining < 60) {
-                var delay = 10000;
-                now = Date.now()
-                delay += (rateLimitResetTime - now);
-                delay = Math.max(1, delay);
-                min = (delay / 60000)
-                console.log('Waiting for twitter api cooldown ' +  min.toFixed(0) + ' minus.')
-            }else {
-                var delay = 1;
-            }
+        if (response.__status__ >= 200 && response.__status__ < 300) {
 
-            return new Promise((resolve, reject)=> {
-                setTimeout(()=> { 
+            return new Promise((resolve, reject) => {
+                setTimeout(() => {
                     resolve(response);
-                }, delay);
+                }, 100);
             });
-        }
-        else {
-            throw new Error(response.status);
+        } else {
+            throw new Error(response.__status__);
         }
     })
 }
+
 // request.user_id
 // request.CSRFCookie
 chrome.runtime.onMessage.addListener(
     function (request, sender, sendResponse) {
-        if (request.contentScriptQuery == "doRequest") {
+        if (request.contentScriptQuery === "doRequest") {
             _makeRequest({
                 ...request,
                 url: 'https://api.twitter.com/1.1/' + request.url,
             })
-            .then((response) => sendResponse({success: true, response: response}))
-            .catch((response) => sendResponse({success: false, response: response}))
+                .then((response) => sendResponse({success: true, response: response}))
+                .catch((response) => sendResponse({success: false, response: response}))
             return true;  // Will respond asynchronously.
         }
     }
 );
+
