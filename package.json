@@ -9,7 +9,7 @@
   "icon": "data/icon32.png",
   "icon64": "data/icon64.png",
   "devDependencies": {
-    "grunt": "^0.4.5",
-    "grunt-contrib-compress": "^0.13.0"
+    "grunt": "^1.1.0",
+    "grunt-contrib-compress": "^1.6.0"
   }
 }

@@ -5,8 +5,8 @@ var usersBlocked = 0,
     totalCount = 0,
     errors = 0;
 var batchBlockCount = 5;
-var finderRunning = true,
-    blockerRunning = true;
+var finderRunning = false,
+    blockerRunning = false;
 var blockQueue = new Queue();
 var currentProfileName = "";
 var connectionType = "following";
@@ -275,13 +275,16 @@ class WebTwitter {
 
 class MobileTwitter {
 
-    cursor = null;
+    constructor() {
+        this.cursor = null;
 
-    id_chunks = [];
+        this.id_chunks = [];
 
-    rateLimitResetTimeOfFetchIds = Date.now();
+        this.rateLimitResetTimeOfFetchIds = Date.now();
 
-    have_ids_all_fetched = false;
+        this.have_ids_all_fetched = false;
+    }
+
 
     getProfileUsername() {
         return window.location.href.match(/twitter\.com\/(.+?)\/(followers|following)/)[1];
@@ -546,8 +549,8 @@ class MobileTwitter {
         if (!blockerRunning) {
             console.log("block action completed.");
         } else {
-            // block api has no ratelimit headers, so sleep at least 1.5s.
-            await sleep(blockUserRLResetT - Date.now() + 1500);
+            // block api has no ratelimit headers, so sleep at least 4s.
+            await sleep(blockUserRLResetT - Date.now() + 4000);
             return this._doBlockUsers();
         }
     }
