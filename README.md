@@ -8,8 +8,6 @@ plugin, you can block all users on that page.
 
 Chrome users can install the extension here: [Chrome Web Store](https://chrome.google.com/webstore/detail/twitter-block-chain/dkkfampndkdnjffkleokegfnibnnjfah?hl=en)
 
-Firefox users can install the extension here: [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/twitter-block-chain/)
-
 # Build Instructions
 
 * Building requires `grunt` and `grunt-cli`
