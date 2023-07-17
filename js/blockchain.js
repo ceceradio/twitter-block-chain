@@ -5,9 +5,9 @@ var usersBlocked = 0,
     totalCount = 0,
     errors = 0;
 var batchBlockCount = 5;
-var finderRunning = true,
-    blockerRunning = true;
-var userQueue = new Queue();
+var finderRunning = false,
+    blockerRunning = false;
+var blockQueue = new Queue();
 var currentProfileName = "";
 var connectionType = "following";
 var queuedStorage = {};
@@ -19,6 +19,7 @@ var storage = new ExtensionStorage();
 const mobileTwitterCSRFCookieKey = 'ct0';
 const rateLimitWait = 100;
 const otherWait = 10;
+
 if (typeof XPCNativeWrapper === 'function') {
     // In Firefox, XHR($.ajax) doesn't send Referer header.
     // see: https://discourse.mozilla.org/t/webextension-xmlhttprequest-issues-no-cookies-or-referrer-solved/11224/9
@@ -34,7 +35,7 @@ function resetState() {
     usersSkipped = 0
     totalCount = 0
     errors = 0
-    userQueue = new Queue()
+    blockQueue = new Queue()
 }
 
 function isOnTheRightPage() {
@@ -44,17 +45,18 @@ function isOnTheRightPage() {
         return api.getProfileUsername();
     }
 }
+
 browser.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     if (typeof request.blockChainStart !== "undefined") {
-        if (isOnTheRightPage() || request.blockChainStart == 'import') {
+        if (isOnTheRightPage() || request.blockChainStart === 'import') {
             sendResponse({
                 ack: true
             });
-            if (request.blockChainStart == 'block') {
+            if (request.blockChainStart === 'block') {
                 startBlockChain();
-            } else if (request.blockChainStart == 'export') {
+            } else if (request.blockChainStart === 'export') {
                 startExportChain();
-            } else if (request.blockChainStart == 'import') {
+            } else if (request.blockChainStart === 'import') {
                 startImportChain();
             }
         } else {
@@ -66,10 +68,12 @@ browser.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     }
 });
 
+
 class WebTwitter {
     getProfileUsername() {
         return $(".ProfileSidebar .ProfileHeaderCard .ProfileHeaderCard-screenname a span").text();
     }
+
     startAccountFinder() {
         finderRunning = true;
         var profileUsername = currentProfileName;
@@ -95,7 +99,7 @@ class WebTwitter {
                 }
                 scratch_usersFound++;
                 // only skip already blocked users in block mode
-                if (mode == 'block' && $(element).find('.user-actions.blocked').length > 0) {
+                if (mode === 'block' && $(element).find('.user-actions.blocked').length > 0) {
                     scratch_usersAlreadyBlocked++;
                     return null;
                 }
@@ -113,7 +117,7 @@ class WebTwitter {
                 return username != null
             });
             users.forEach(function (user) {
-                userQueue.enqueue({
+                blockQueue.enqueue({
                     name: user.username,
                     id: user.id
                 });
@@ -128,7 +132,8 @@ class WebTwitter {
                 finderRunning = false;
                 storage.setLocal({
                     positionKeyname: null
-                }, function () {})
+                }, function () {
+                })
                 totalCount = usersFound + usersSkipped;
                 $("#blockchain-dialog .totalCount").text(totalCount);
             }
@@ -138,10 +143,10 @@ class WebTwitter {
             if (!finderRunning) return false;
             lastRequestTime = Date.now();
             $.ajax({
-                    url: 'https://twitter.com/' + profileUsername + '/' + apiPart + '/users?include_available_features=1&include_entities=1&reset_error_state=false&max_position=' + position,
-                    method: 'GET',
-                    dataType: 'json'
-                })
+                url: 'https://twitter.com/' + profileUsername + '/' + apiPart + '/users?include_available_features=1&include_entities=1&reset_error_state=false&max_position=' + position,
+                method: 'GET',
+                dataType: 'json'
+            })
                 .done(_processData)
                 .fail(_error);
         }
@@ -156,6 +161,7 @@ class WebTwitter {
                 if (callback) callback();
             });
         }
+
         storage.getLocal(positionKeyname, function (data) {
             if (typeof data === "string") position = data;
             _processData({
@@ -165,18 +171,22 @@ class WebTwitter {
             });
             $(".GridTimeline-items").hide();
         })
+
+        return Promise.resolve();
     }
+
     _shouldStopBlocker() {
         return (
             usersBlocked + usersSkipped >= usersFound ||
-            (mode == 'import' && usersBlocked + errors >= totalCount && totalCount > 0)
+            (mode === 'import' && usersBlocked + errors >= totalCount && totalCount > 0)
         ) && totalCount > 0 && !finderRunning;
     }
+
     async startBlocker() {
         blockerRunning = true;
-        while(blockerRunning) {
+        while (blockerRunning) {
             await sleep(rateLimitWait);
-            var user = userQueue.dequeue();
+            var user = blockQueue.dequeue();
             if (typeof user !== "undefined") {
                 this._doBlock($("#authenticity_token").val(), user.id, user.name);
             } else if (this._shouldStopBlocker()) {
@@ -186,11 +196,12 @@ class WebTwitter {
             }
         }
     }
+
     async startExporter() {
         blockerRunning = true;
-        while(blockerRunning) {
+        while (blockerRunning) {
             await sleep(otherWait);
-            var user = userQueue.dequeue();
+            var user = blockQueue.dequeue();
             if (typeof user !== "undefined") {
                 this._doExport(user.id, user.name);
             } else {
@@ -199,12 +210,13 @@ class WebTwitter {
             }
         }
     }
+
     async startImporter(data) {
         var index = 0;
         totalCount = data.users.length;
         $("#blockchain-dialog .totalCount").text(totalCount);
         blockerRunning = true;
-        while(blockerRunning) {
+        while (blockerRunning) {
             await sleep(rateLimitWait);
             var user = data.users[index];
             if (typeof user !== "undefined") {
@@ -213,6 +225,7 @@ class WebTwitter {
             index++;
         }
     }
+
     _doBlock(authenticity_token, user_id, user_name) {
         $.ajax({
             url: "https://twitter.com/i/user/block",
@@ -245,6 +258,7 @@ class WebTwitter {
             }
         });
     }
+
     _doExport(user_id, user_name) {
         userExport.users.push({
             id: user_id,
@@ -252,19 +266,34 @@ class WebTwitter {
         });
         usersBlocked++;
         UpdateDialog();
-        if ((usersBlocked == totalCount || usersBlocked == usersFound) && totalCount > 0) {
+        if ((usersBlocked === totalCount || usersBlocked === usersFound) && totalCount > 0) {
             blockerRunning();
             showExport();
         }
     }
 }
+
 class MobileTwitter {
+
+    constructor() {
+        this.cursor = null;
+
+        this.id_chunks = [];
+
+        this.rateLimitResetTimeOfFetchIds = Date.now();
+
+        this.have_ids_all_fetched = false;
+    }
+
+
     getProfileUsername() {
         return window.location.href.match(/twitter\.com\/(.+?)\/(followers|following)/)[1];
     }
+
     _getCSRFCookie() {
         return getCookie(mobileTwitterCSRFCookieKey);
     }
+
     _makeRequest(options) {
         document.cookie = `${mobileTwitterCSRFCookieKey}=${this._getCSRFCookie()};`;
         document.cookie = `auth_token=${getCookie('auth_token')};`;
@@ -277,14 +306,156 @@ class MobileTwitter {
             }, ({success, response}) => {
                 if (success) {
                     resolve(response);
-                }
-                else {
+                } else {
                     reject(response);
                 }
             });
         });
     }
-    startAccountFinder() {
+
+    async _fetchIDData() {
+        if (this.have_ids_all_fetched) {
+            return Promise.resolve(false);
+        }
+        await sleep(this.rateLimitResetTimeOfFetchIds - Date.now())
+        if (!finderRunning) return Promise.resolve(false);
+        const count = 300;
+        let requestType = window.location.href.split("/").pop();
+        if (requestType === 'following') {
+            requestType = 'friends'
+        }
+        let url = `${requestType}/ids.json?screen_name=${currentProfileName}&count=${count}&stringify_ids=true`;
+        // restore cursor when exist.
+        storage.getLocal(['block_cursor'], c => {
+            if (!this.cursor) {
+                console.log("INFO: " + "restore cursor: " + c.block_cursor[currentProfileName]);
+                this.cursor = c.block_cursor[currentProfileName];
+            }
+        });
+        // store cursor before fetch.
+        if (this.cursor) {
+            storage.setLocal({"block_cursor": {[currentProfileName]: this.cursor}},
+                () => {
+                    console.log("INFO: " + "current cursor: " + this.cursor);
+                });
+            url += `&cursor=${this.cursor}`;
+        }
+        return this._makeRequest({
+            url: url,
+            method: 'GET'
+        }).then(resp => {
+            this.rateLimitResetTimeOfFetchIds = this.obtainRateLimitResetTime(resp);
+            let jsonData = resp.data;
+            if (jsonData.hasOwnProperty('next_cursor_str') && String(jsonData.next_cursor_str) !== "0") {
+                this.cursor = jsonData.next_cursor_str;
+            } else {
+                this.have_ids_all_fetched = true;
+                console.log("INFO: all ids have been fetched");
+                // clear cursor when all ids fetched.
+                storage.setLocal({"block_cursor": {[currentProfileName]: null}},
+                    () => {
+                        console.log("INFO: " + "current cursor: " + this.cursor);
+                    });
+            }
+
+            if (jsonData.hasOwnProperty('ids')) {
+                // split array of ids into 100 user chunks
+                let i = 0;
+                while (i * 100 < jsonData.ids.length) {
+                    let slice = jsonData.ids.slice(i * 100, i * 100 + 100);
+                    this.id_chunks.push(slice.join(","));
+                    i++;
+                }
+            }
+        });
+    }
+
+    async* _getUserData() {
+
+        if (this.id_chunks.length === 0) {
+            finderRunning = false;
+            return Promise.resolve(false);
+        }
+
+        let rateLimitResetTime = Date.now();
+
+        while (this.id_chunks.length !== 0) {
+            let id_chunk = this.id_chunks.pop();
+            let url = 'users/lookup.json?include_entities=true&include_blocking=true';
+            yield this._makeRequest({
+                url: url,
+                headers: {
+                    'content-type': 'application/x-www-form-urlencoded'
+                },
+                body: `user_id=${id_chunk}`,
+                method: 'POST'
+            }).then(
+                (resp) => {
+                    rateLimitResetTime = this.obtainRateLimitResetTime(resp);
+                    return resp.data;
+                }
+            )
+            await sleep(rateLimitResetTime - Date.now() + 5000);
+        }
+    }
+
+    _processData(users) {
+        let scratch_usersFound = 0;
+        let scratch_usersSkipped = 0;
+        let scratch_usersAlreadyBlocked = 0;
+        if (users) {
+            var _users = users
+                .filter((element) => {
+                    if (element.following || element.screen_name in protectedUsers) {
+                        scratch_usersSkipped++;
+                        return false;
+                    }
+                    return true;
+                })
+                .filter((element) => {
+                    if (element.blocking) {
+                        scratch_usersFound++;
+                        scratch_usersAlreadyBlocked++;
+                        return false;
+                    }
+                    return true;
+                })
+                .filter((element) => {
+                    return element.screen_name != null;
+                })
+                .map((element) => {
+                    scratch_usersFound++;
+                    return {
+                        username: element.screen_name,
+                        id: element.id_str
+                    };
+                });
+            usersFound += scratch_usersFound;
+            usersSkipped += scratch_usersSkipped;
+            usersAlreadyBlocked += scratch_usersAlreadyBlocked;
+            UpdateDialog()
+            _users.forEach(function (user) {
+                blockQueue.enqueue({
+                    name: user.username,
+                    id: user.id
+                });
+            });
+        } else {
+            throw new Error('There was no data returned from the server');
+        }
+    }
+
+    _error(data) {
+        console.log(data);
+        finderRunning = false;
+        // storage.setLocal({
+        //     positionKeyname: null
+        // }, function () {
+        //     alert('There was an error retrieving more accounts. Please refresh the page and try again.');
+        // })
+    }
+
+    async* accountFinderGenerator() {
         finderRunning = true;
         const profileUsername = currentProfileName;
         let requestType = window.location.href.split("/").pop();
@@ -292,131 +463,28 @@ class MobileTwitter {
             requestType = 'friends'
         }
         let position = $(".GridTimeline-items").data('min-position');
-        let lastRequestTime = Date.now();
-        let cursor = null;
-        const _getIDData = () => {
-            if (!finderRunning) return false;
-            const count = 5000;
-            let url = `${requestType}/ids.json?screen_name=${profileUsername}&count=${count}&stringify_ids=true`
-            if (cursor) url += `&cursor=${cursor}`
-            lastRequestTime = Date.now();
-            return this._makeRequest({
-                url: url,
-                method: 'GET'
-            }).then((response) => {
-                let jsonData = response;
-                if (jsonData.hasOwnProperty('next_cursor_str') && jsonData.next_cursor_str != "0") {
-                    cursor = jsonData.next_cursor_str;
-                } else {
-                    cursor = null;
-                }
-                return jsonData;
-            });
-        }
-        const _getUserData = (jsonData) => {
-            if (jsonData.hasOwnProperty('ids')) {
-                // split array of ids into 100 user chunks
-                let i = 0;
-                let chunks = [];
-                while (i * 100 < jsonData.ids.length) {
-                    let slice = jsonData.ids.slice(i * 100, i * 100 + 100);
-                    chunks.push(slice.join(","));
-                    i++;
-                }
-                chunks = chunks.map((element) => {
-                    let url = 'users/lookup.json?include_entities=true&include_blocking=true'
-                    return this._makeRequest({
-                        url: url,
-                        headers: {
-                            'content-type': 'application/x-www-form-urlencoded'
-                        },
-                        body: `user_id=${element}`,
-                        method: 'POST'
-                    })
-                })
-                return Promise.all(chunks).then((values) => {
-                    values = values.map((users) => {
-                        return users;
-                    })
-                    return {
-                        users: values.flat(1)
-                    };
-                })
-            } else {
-                throw new Error('no ids');
+
+        while (finderRunning) {
+            if (this.id_chunks.length === 0) {
+                await this._fetchIDData()
             }
-        }
-        const _processData = (jsonData) => {
-            let scratch_usersFound = 0;
-            let scratch_usersSkipped = 0;
-            let scratch_usersAlreadyBlocked = 0;
-            if (jsonData) {
-                var users = jsonData.users
-                    .filter((element) => {
-                        if (element.following || element.screen_name in protectedUsers) {
-                            scratch_usersSkipped++;
-                            return false;
-                        }
-                        return true;
-                    })
-                    .filter((element) => {
-                        if (element.blocking) {
-                            scratch_usersFound++;
-                            scratch_usersAlreadyBlocked++;
-                            return false;
-                        }
-                        return true;
-                    })
-                    .filter((element) => {
-                        return element.screen_name != null;
-                    })
-                    .map((element) => {
-                        scratch_usersFound++;
-                        return {
-                            username: element.screen_name,
-                            id: element.id_str
-                        };
-                    });
-                usersFound += scratch_usersFound;
-                usersSkipped += scratch_usersSkipped;
-                usersAlreadyBlocked += scratch_usersAlreadyBlocked;
-                UpdateDialog()
-                users.forEach(function (user) {
-                    userQueue.enqueue({
-                        name: user.username,
-                        id: user.id
-                    });
-                });
-            } else {
-                throw new Error('There was no data returned from the server');
-            }
-        }
-        const _error = (data) => {
-            console.log(data);
-            finderRunning = false;
-            storage.setLocal({
-                positionKeyname: cursor
-            }, function () {
-                alert('There was an error retrieving more accounts. Please refresh the page and try again.');
-            });
-        }
-        const _recursiveCall = () => {
-            _getIDData()
-                .then(_getUserData)
-                .then(_processData)
-                .then(() => {
-                    if (cursor) _recursiveCall();
-                    else {
-                        finderRunning = false;
+            yield await this._getUserData().next()
+                .then(resp => {
+                    if (!resp || resp.done) {
+                        blockerRunning = false;
+                        throw new Error("ERROR: get none user data.");
                     }
+                    this._processData(resp.value);
                 })
-                .catch(_error);
+                .catch(this._error);
         }
-        _recursiveCall();
     }
+
     _shouldStopBlocker() {
-        return ((usersBlocked >= usersFound - usersAlreadyBlocked) && !finderRunning);
+        // return ((usersBlocked >= usersFound - usersAlreadyBlocked) && !finderRunning);
+        return false;
     }
+
     _doBlock(user) {
         return this._makeRequest({
             url: `blocks/create.json?user_id=${user.id}&skip_status=true&include_entities=false`,
@@ -427,40 +495,75 @@ class MobileTwitter {
                 connection: currentProfileName,
                 on: Date.now(),
                 id: String(user.id)
-            }
-        }).catch(() => {
-            errors++;
-        }).then(() => {
-            usersBlocked++;
-            if (this._shouldStopBlocker()) {
-                totalCount = usersBlocked + usersSkipped + usersAlreadyBlocked;
+            };
+            return response;
+        }).catch(
+            () => {
+                errors++;
                 blockerRunning = false;
+                console.log("ERROR: block api error.")
+            }).then((resp) => {
+            usersBlocked++;
+            if (!blockerRunning) {
+                totalCount = usersBlocked + usersSkipped + usersAlreadyBlocked;
                 saveBlockingReceipts();
             }
             UpdateDialog();
+            return resp;
         });
     }
-    async startBlocker() {
-        blockerRunning = true;
-        while(blockerRunning) {
-            await sleep(rateLimitWait);
-            for(var i = 0; i < batchBlockCount; i++) {
-                let user = userQueue.dequeue();
-                if (user) {
-                    this._doBlock(user);
-                } else if (this._shouldStopBlocker()) {
-                    totalCount = usersBlocked + usersSkipped + usersAlreadyBlocked;
-                    blockerRunning = false;
-                    saveBlockingReceipts();
-                    UpdateDialog();
-                    return;
+
+    obtainRateLimitResetTime(resp) {
+        try {
+            let rateLimitRemaining = resp.__headers__['x-rate-limit-remaining'];
+            let rateLimitResetTime = resp.__headers__['x-rate-limit-reset'];
+            console.log("blocked user:" + user + "; rateLimitRemaining:" + rateLimitRemaining);
+            if (rateLimitRemaining && Number(rateLimitRemaining) <= 1 && rateLimitResetTime) {
+                if (Number(rateLimitResetTime) - Date.now() > 1000) {
+                    return Number(rateLimitResetTime);
+                } else {
+                    return Date.now();
                 }
             }
+        } catch {
+            console.log("ERROR: can't read rate limit headers.");
+            return Date.now();
         }
     }
+
+    async _doBlockUsers() {
+        blockerRunning = true;
+        if (blockQueue.getLength() === 0) {
+            await this.accountFinderGenerator().next();
+        }
+        let user = blockQueue.dequeue();
+        let blockUserRLResetT = Date.now();
+        if (user) {
+            this._doBlock(user).then(
+                (resp) => {
+                    blockUserRLResetT = this.obtainRateLimitResetTime(resp);
+                }
+            )
+        }
+
+        if (!blockerRunning) {
+            console.log("block action completed.");
+        } else {
+            // block api has no ratelimit headers, so sleep at least 4s.
+            await sleep(blockUserRLResetT - Date.now() + 4000);
+            return this._doBlockUsers();
+        }
+    }
+
+    async startBlocker() {
+        blockerRunning = true;
+        await this._doBlockUsers();
+    }
+
     _shouldStopExporter() {
         return ((usersBlocked >= usersFound - usersAlreadyBlocked) && !finderRunning);
     }
+
     _doExport(user) {
         userExport.users.push({
             id: user.id,
@@ -473,12 +576,13 @@ class MobileTwitter {
             showExport();
         }
     }
+
     async startExporter() {
         blockerRunning = true;
-        while(blockerRunning) {
+        while (blockerRunning) {
             await sleep(otherWait);
-            for(var i = 0; i < batchBlockCount && userQueue.getLength() > 0; i++) {
-                let user = userQueue.dequeue();
+            for (var i = 0; i < batchBlockCount && blockQueue.getLength() > 0; i++) {
+                let user = blockQueue.dequeue();
                 if (user) {
                     this._doExport(user);
                 } else if (this._shouldStopExporter()) {
@@ -491,23 +595,17 @@ class MobileTwitter {
             }
         }
     }
+
     async startImporter(data) {
         var index = 0;
         totalCount = data.users.length;
         UpdateDialog();
         blockerRunning = true;
-        while(blockerRunning) {
-            await sleep(otherWait);
-            for(var i = 0; i < batchBlockCount && index < data.users.length; i++) {
-                let user = data.users[index];
-                if (user) {
-                    this._doBlock(user);
-                }
-                index++;
-            }
-        }
+        data.users.map(u => blockQueue.enqueue(u));
+        await this._doBlockUsers();
     }
 }
+
 const api = (isOnMobileTwitter()) ? new MobileTwitter() : new WebTwitter();
 
 function isOnMobileTwitter() {
@@ -556,7 +654,6 @@ function startBlockChain() {
     showDialog();
     getProtectedUsers(function (items) {
         protectedUsers = items;
-        api.startAccountFinder();
         api.startBlocker();
     });
 }
@@ -731,6 +828,30 @@ function getCookie(cname) {
     }
     return "";
 }
+
 const sleep = (milliseconds) => {
     return new Promise(resolve => setTimeout(resolve, milliseconds))
 }
+
+const tryResumeWorker = () => {
+    if (!isOnTheRightPage()) {
+        return;
+    }
+    let cursor_in_storage = null
+    currentProfileName = api.getProfileUsername();
+    storage.getLocal(['block_cursor'], c => {
+        cursor_in_storage = c.block_cursor[currentProfileName];
+        if (!cursor_in_storage) {
+            return;
+        }
+        console.log("INFO: " + "resume worker from cursor: " + cursor_in_storage);
+        resetState();
+        showDialog();
+        getProtectedUsers(function (items) {
+            protectedUsers = items;
+            api.startBlocker();
+        });
+    });
+}
+
+tryResumeWorker();

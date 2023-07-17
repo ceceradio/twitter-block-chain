@@ -10,11 +10,55 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
                 break;
             }
         }
-        return { requestHeaders: details.requestHeaders };
+        return {requestHeaders: details.requestHeaders};
     },
-    { urls: ['https://twitter.com/i/user/block'] },
+    {urls: ['https://twitter.com/i/user/block']},
     ['blocking', 'requestHeaders']
 );
+
+function _xhr(obj) {
+    return new Promise((resolve, reject) => {
+        let xhr = new XMLHttpRequest();
+        xhr.withCredentials = true;
+        xhr.open(obj.method || "GET", obj.url);
+        if (obj.headers) {
+            Object.keys(obj.headers).forEach(key => {
+                xhr.setRequestHeader(key, obj.headers[key]);
+            });
+        }
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 400) {
+                // Get the raw header string
+                var headers = xhr.getAllResponseHeaders();
+
+                // Convert the header string into an array
+                // of individual headers
+                var arr = headers.trim().split(/[\r\n]+/);
+
+                // Create a map of header names to values
+                var headerMap = {};
+                arr.forEach(function (line) {
+                    var parts = line.split(': ');
+                    var header = parts.shift();
+                    if (header.toLowerCase() === "x-rate-limit-remaining"
+                        || header.toLowerCase() === "x-rate-limit-reset") {
+                        header = header.toLowerCase();
+                    }
+                    headerMap[header] = parts.join(': ');
+                });
+                rsp = JSON.parse(xhr.response);
+                // Object.assign(rsp, {"__headers__": headerMap, "__status__": xhr.status})
+                rsp_ex = {"__headers__": headerMap, "__status__": xhr.status, "data": rsp};
+                resolve(rsp_ex);
+            } else {
+                reject(xhr.statusText);
+            }
+        };
+        xhr.onerror = () => reject(xhr.statusText);
+        xhr.send(obj.body);
+    });
+}
+
 function _makeRequest(obj) {
     const addtlHeaders = {
         authorization: mobileTwitterBearerToken,
@@ -25,37 +69,33 @@ function _makeRequest(obj) {
     } else {
         obj.headers = addtlHeaders;
     }
-    return fetch(
-        obj.url, 
-        {
-            credentials: 'include',
-            method: obj.method || "GET",
-            headers: {
-                ...obj.headers
-            },
-            body: obj.body
-        }
-    ).then((response) => {
-        if (response.status >= 200 && response.status < 300) {
-            return response.json();
-        }
-        else {
-            throw new Error(response.statusText);
+    return _xhr(obj).then((response) => {
+        if (response.__status__ >= 200 && response.__status__ < 300) {
+
+            return new Promise((resolve, reject) => {
+                setTimeout(() => {
+                    resolve(response);
+                }, 100);
+            });
+        } else {
+            throw new Error(response.__status__);
         }
     })
 }
+
 // request.user_id
 // request.CSRFCookie
 chrome.runtime.onMessage.addListener(
     function (request, sender, sendResponse) {
-        if (request.contentScriptQuery == "doRequest") {
+        if (request.contentScriptQuery === "doRequest") {
             _makeRequest({
                 ...request,
                 url: 'https://api.twitter.com/1.1/' + request.url,
             })
-            .then((response) => sendResponse({success: true, response: response}))
-            .catch((response) => sendResponse({success: false, response: response}))
+                .then((response) => sendResponse({success: true, response: response}))
+                .catch((response) => sendResponse({success: false, response: response}))
             return true;  // Will respond asynchronously.
         }
     }
 );
+
