@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "Twitter Block Chain",
+  "name": "X.com Block Chain",
   "description": "Blocks all users on a following/followers page.",
-  "version": "1.8.3",
+  "version": "2",
   "icons": { 
     "16": "images/icon16.png",
     "48": "images/icon48.png",
@@ -26,6 +26,9 @@
     "https://api.twitter.com/",
     "https://mobile.twitter.com/",
     "https://twitter.com/"
+    "https://api.x.com/"
+    "https://mobile.x.com/"
+    "https://x.com/"
   ],
   "options_ui": {
     "browser_style": true,
@@ -34,7 +37,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://mobile.twitter.com/*","https://twitter.com/*"],
+      "matches": ["https://mobile.x.com/*","https://x.com/*"],
       "css": ["css/content.css"],
       "js": [
         "js/browser-polyfill.min.js",
